@@ -256,7 +256,7 @@ public class Instance extends IsolatedExecutor implements IInvokableInstance
         sync(CassandraDaemon::uncaughtException).accept(thread, throwable);
     }
 
-    private static IMessage serializeMessage(InetAddressAndPort from, InetAddressAndPort to, Message<?> messageOut)
+    public static IMessage serializeMessage(InetAddressAndPort from, InetAddressAndPort to, Message<?> messageOut)
     {
         try (DataOutputBuffer out = new DataOutputBuffer(1024))
         {
