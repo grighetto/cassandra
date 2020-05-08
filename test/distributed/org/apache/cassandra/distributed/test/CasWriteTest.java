@@ -32,6 +32,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+import com.google.common.util.concurrent.Uninterruptibles;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -46,20 +47,14 @@ import org.slf4j.LoggerFactory;
 import org.apache.cassandra.distributed.Cluster;
 import org.apache.cassandra.distributed.api.ConsistencyLevel;
 import org.apache.cassandra.distributed.api.ICluster;
-import org.apache.cassandra.distributed.api.IInvokableInstance;
-import org.apache.cassandra.distributed.api.IMessage;
-import org.apache.cassandra.distributed.impl.Instance;
 import org.apache.cassandra.distributed.shared.InstanceClassLoader;
 import org.apache.cassandra.exceptions.CasWriteTimeoutException;
 import org.apache.cassandra.exceptions.CasWriteUnknownResultException;
-import org.apache.cassandra.locator.InetAddressAndPort;
-import org.apache.cassandra.net.Message;
 import org.apache.cassandra.net.Verb;
 import org.apache.cassandra.utils.FBUtilities;
 import org.hamcrest.BaseMatcher;
 import org.hamcrest.Description;
 
-import static org.apache.cassandra.distributed.impl.DistributedTestSnitch.toCassandraInetAddressAndPort;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.apache.cassandra.distributed.shared.AssertUtils.*;
 
@@ -256,52 +251,24 @@ public class CasWriteTest extends TestBaseImpl
     public void testWriteUnknownResult()
     {
         cluster.filters().reset();
-        // intercept PAXOS_PROPOSE_RSP messages from nodes 2 and 3 back to the coordinator (node 1) and
-        // replace their payload with the boolean value `false`
-        cluster.filters().verbs(Verb.PAXOS_PROPOSE_RSP.id).from(2, 3).to(1).messagesMatching((from, to, msg) -> {
-
-            IInvokableInstance fromInstance = (IInvokableInstance) cluster.get(from),
-                toInstance = (IInvokableInstance) cluster.get(to);
-            InetAddressAndPort fromAddress = toCassandraInetAddressAndPort(fromInstance.broadcastAddress()),
-                toAddress = toCassandraInetAddressAndPort(toInstance.broadcastAddress());
-
-            // Message de/serialization must happen on the instance thread to leverage the isolated
-            // classloader of the respective node
-            boolean payload = fromInstance.callOnInstance(() -> {
-                Message<Boolean> deserMsg = (Message<Boolean>) Instance.deserializeMessage(msg);
-                return deserMsg.payload;
-            });
-
-            // if we're intercepting a PAXOS_PROPOSE_RSP message with a `true` payload, we want to replace it with a
-            // `false` payload, in order to make the Paxos proposal stage fail for the majority of the nodes
-            if (payload) {
-                IMessage newProposeRsp = toInstance.callOnInstance(() -> {
-                    Message<Boolean> newMessage = Message
-                        .builder(Verb.PAXOS_PROPOSE_RSP, false)
-                        .from(fromAddress)
-                        .withId(msg.id())
-                        .build();
-                    IMessage iMessage = Instance.serializeMessage(
-                        fromAddress,
-                        toAddress,
-                        newMessage
-                    );
-                    return iMessage;
-                });
-                // send overwritten message to coordinator
-                toInstance.receiveMessage(newProposeRsp);
-
-                // we have to prevent the original message from reaching the coordinator node,
-                // so we flag it here to be dropped
-                return true;
+        int pk = pkGen.getAndIncrement();
+        CountDownLatch ready = new CountDownLatch(1);
+        cluster.filters().verbs(Verb.PAXOS_PROPOSE_REQ.id).from(1).to(2, 3).messagesMatching((from, to, msg) -> {
+            if (to == 2)
+            {
+                // Inject a single CAS request in-between prepare and propose phases
+                cluster.coordinator(2).execute(mkCasInsertQuery((a) -> pk, 1, 2),
+                                               ConsistencyLevel.QUORUM);
+                ready.countDown();
+            } else {
+                Uninterruptibles.awaitUninterruptibly(ready);
             }
-
             return false;
         }).drop();
 
         try
         {
-            cluster.coordinator(1).execute(mkUniqueCasInsertQuery( 1), ConsistencyLevel.QUORUM);
+            cluster.coordinator(1).execute(mkCasInsertQuery((a) -> pk, 1, 1), ConsistencyLevel.QUORUM);
         }
         catch (Throwable t)
         {
