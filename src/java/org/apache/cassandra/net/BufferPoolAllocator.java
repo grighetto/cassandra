@@ -56,7 +56,7 @@ public abstract class BufferPoolAllocator extends AbstractByteBufAllocator
     @Override
     protected ByteBuf newDirectBuffer(int minCapacity, int maxCapacity)
     {
-        ByteBuf result = new Wrapped(this, getAtLeast(minCapacity));
+        ByteBuf result = new Wrapped(this, getAtLeast(minCapacity), maxCapacity);
         result.clear();
         return result;
     }
@@ -93,9 +93,9 @@ public abstract class BufferPoolAllocator extends AbstractByteBufAllocator
     {
         private ByteBuffer wrapped;
 
-        Wrapped(BufferPoolAllocator allocator, ByteBuffer wrap)
+        Wrapped(BufferPoolAllocator allocator, ByteBuffer wrap, int maxCapacity)
         {
-            super(allocator, wrap, wrap.capacity());
+            super(allocator, wrap, maxCapacity);
             wrapped = wrap;
         }
 
