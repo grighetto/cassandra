@@ -28,8 +28,11 @@ import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 
+import io.netty.buffer.ByteBuf;
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.io.util.RandomAccessReader;
+import org.apache.cassandra.net.GlobalBufferPoolAllocator;
 
 import static org.junit.Assert.*;
 
@@ -144,6 +147,32 @@ public class BufferPoolTest
     public void testRecycle()
     {
         requestUpToSize(RandomAccessReader.DEFAULT_BUFFER_SIZE, 3 * BufferPool.NORMAL_CHUNK_SIZE);
+    }
+
+    @Test
+    public void testBufferDefaultMaxCapacity()
+    {
+        DatabaseDescriptor.clientInitialization();
+        ByteBuf noMaxCapacity = GlobalBufferPoolAllocator.instance.buffer(100);
+        noMaxCapacity.writeBytes(new byte[200]);
+        assertEquals(200, noMaxCapacity.readableBytes());
+    }
+
+    @Test
+    public void testBufferWithMaxCapacity()
+    {
+        DatabaseDescriptor.clientInitialization();
+        ByteBuf maxCapacity = GlobalBufferPoolAllocator.instance.buffer(100, 200);
+        maxCapacity.writeBytes(new byte[200]);
+        assertEquals(200, maxCapacity.readableBytes());
+    }
+
+    @Test(expected = IndexOutOfBoundsException.class)
+    public void testBufferExceedMaxCapacity()
+    {
+        DatabaseDescriptor.clientInitialization();
+        ByteBuf maxCapacity = GlobalBufferPoolAllocator.instance.buffer(100, 200);
+        maxCapacity.writeBytes(new byte[300]);
     }
 
     private void requestDoubleMaxMemory()
