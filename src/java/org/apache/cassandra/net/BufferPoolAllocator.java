@@ -27,6 +27,8 @@ import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.utils.memory.BufferPool;
 import org.apache.cassandra.utils.memory.BufferPools;
 
+import static java.lang.Integer.max;
+
 /**
  * A trivial wrapper around BufferPool for integrating with Netty, but retaining ownership of pooling behaviour
  * that is integrated into Cassandra's other pooling.
@@ -95,7 +97,7 @@ public abstract class BufferPoolAllocator extends AbstractByteBufAllocator
 
         Wrapped(BufferPoolAllocator allocator, ByteBuffer wrap, int maxCapacity)
         {
-            super(allocator, wrap, maxCapacity);
+            super(allocator, wrap, max(wrap.capacity(), maxCapacity));
             wrapped = wrap;
         }
 
