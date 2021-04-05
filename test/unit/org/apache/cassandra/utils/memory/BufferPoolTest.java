@@ -156,6 +156,7 @@ public class BufferPoolTest
         ByteBuf noMaxCapacity = GlobalBufferPoolAllocator.instance.buffer(100);
         noMaxCapacity.writeBytes(new byte[200]);
         assertEquals(200, noMaxCapacity.readableBytes());
+        noMaxCapacity.release();
     }
 
     @Test
@@ -165,6 +166,7 @@ public class BufferPoolTest
         ByteBuf maxCapacity = GlobalBufferPoolAllocator.instance.buffer(100, 200);
         maxCapacity.writeBytes(new byte[200]);
         assertEquals(200, maxCapacity.readableBytes());
+        maxCapacity.release();
     }
 
     @Test(expected = IndexOutOfBoundsException.class)
@@ -172,7 +174,12 @@ public class BufferPoolTest
     {
         DatabaseDescriptor.clientInitialization();
         ByteBuf maxCapacity = GlobalBufferPoolAllocator.instance.buffer(100, 200);
-        maxCapacity.writeBytes(new byte[300]);
+        try
+        {
+            maxCapacity.writeBytes(new byte[300]);
+        } finally {
+            maxCapacity.release();
+        }
     }
 
     private void requestDoubleMaxMemory()
