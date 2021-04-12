@@ -165,13 +165,9 @@ public class BufferPoolTest
     public void testBufferWithMaxCapacity()
     {
         DatabaseDescriptor.clientInitialization();
-        for (int i = 0; i < 10; i++)
-        {
-            ByteBuf buffer = GlobalBufferPoolAllocator.instance.buffer(100, Integer.MAX_VALUE);
-            int writeLength = Integer.MAX_VALUE / 2;
-            buffer.writeBytes(new byte[writeLength]);
-            assertEquals(writeLength, buffer.readableBytes());
-        }
+        ByteBuf buffer = GlobalBufferPoolAllocator.instance.buffer(100, 500);
+        buffer.writeBytes(new byte[500]);
+        assertEquals(500, buffer.readableBytes());
         assertEquals(0, GlobalBufferPoolAllocator.instance.usedSizeInBytes());
     }
 
