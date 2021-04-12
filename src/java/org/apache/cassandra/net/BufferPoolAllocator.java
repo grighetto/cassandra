@@ -26,6 +26,7 @@ import io.netty.buffer.UnpooledUnsafeDirectByteBuf;
 import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.utils.memory.BufferPool;
 import org.apache.cassandra.utils.memory.BufferPools;
+import org.assertj.core.util.VisibleForTesting;
 
 import static java.lang.Integer.max;
 
@@ -78,10 +79,13 @@ public abstract class BufferPoolAllocator extends AbstractByteBufAllocator
         bufferPool.put(buffer);
     }
 
-    void putUnusedPortion(ByteBuffer buffer)
+    @VisibleForTesting
+    public void putUnusedPortion(ByteBuffer buffer)
     {
         bufferPool.putUnusedPortion(buffer);
     }
+
+    public long usedSizeInBytes() { return bufferPool.usedSizeInBytes(); }
 
     void release()
     {
@@ -94,6 +98,7 @@ public abstract class BufferPoolAllocator extends AbstractByteBufAllocator
     public static class Wrapped extends UnpooledUnsafeDirectByteBuf
     {
         private ByteBuffer wrapped;
+        private boolean returnToPool = true;
 
         Wrapped(BufferPoolAllocator allocator, ByteBuffer wrap, int maxCapacity)
         {
@@ -102,9 +107,28 @@ public abstract class BufferPoolAllocator extends AbstractByteBufAllocator
         }
 
         @Override
+        public ByteBuf capacity(int newCapacity)
+        {
+            if (newCapacity == capacity())
+                return this;
+
+            // resizing doesn't use the pool
+            ByteBuf newBuffer = super.capacity(newCapacity);
+            ByteBuffer nioBuffer = newBuffer.nioBuffer(0, newBuffer.capacity());
+
+            if (returnToPool)
+                bufferPool.put(wrapped);
+
+            wrapped = nioBuffer;
+            returnToPool = false;
+            return newBuffer;
+        }
+
+
+        @Override
         public void deallocate()
         {
-            if (wrapped != null)
+            if (wrapped != null && returnToPool)
                 bufferPool.put(wrapped);
         }
 
