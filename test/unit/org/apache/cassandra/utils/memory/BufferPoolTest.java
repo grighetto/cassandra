@@ -211,7 +211,7 @@ public class BufferPoolTest
 
         byte[] bufferContent = new byte[300];
 
-        BufferPoolAllocator.Wrapped wrapped = (BufferPoolAllocator.Wrapped)buffer;
+        BufferPoolAllocator.Wrapped wrapped = (BufferPoolAllocator.Wrapped) buffer;
         ByteBuffer adopted = wrapped.adopt();
         adopted.get(bufferContent);
         assertArrayEquals(content, bufferContent);
@@ -234,7 +234,7 @@ public class BufferPoolTest
 
         byte[] bufferContent = new byte[200];
 
-        BufferPoolAllocator.Wrapped wrapped = (BufferPoolAllocator.Wrapped)buffer;
+        BufferPoolAllocator.Wrapped wrapped = (BufferPoolAllocator.Wrapped) buffer;
         ByteBuffer adopted = wrapped.adopt();
         adopted.get(bufferContent);
         assertArrayEquals(content, bufferContent);
