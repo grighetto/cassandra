@@ -263,9 +263,10 @@ public abstract class FrameDecoder extends ChannelInboundHandlerAdapter
     {
         if (msg instanceof BufferPoolAllocator.Wrapped)
         {
-            ByteBuffer buf = ((BufferPoolAllocator.Wrapped) msg).adopt();
+            BufferPoolAllocator.Wrapped wrapped = (BufferPoolAllocator.Wrapped) msg;
             // netty will probably have mis-predicted the space needed
-            allocator.putUnusedPortion(buf);
+            allocator.putUnusedPortion(wrapped);
+            ByteBuffer buf = ((BufferPoolAllocator.Wrapped) msg).adopt();
             channelRead(ShareableBytes.wrap(buf));
         }
         else if (msg instanceof ShareableBytes) // legacy LZ4 decoder

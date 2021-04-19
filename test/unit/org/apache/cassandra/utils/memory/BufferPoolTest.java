@@ -32,7 +32,6 @@ import io.netty.buffer.ByteBuf;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.io.util.RandomAccessReader;
-import org.apache.cassandra.net.BufferPoolAllocator;
 import org.apache.cassandra.net.GlobalBufferPoolAllocator;
 
 import static org.junit.Assert.*;
@@ -169,6 +168,7 @@ public class BufferPoolTest
         buffer.writeBytes(new byte[500]);
         assertEquals(500, buffer.readableBytes());
         assertEquals(0, GlobalBufferPoolAllocator.instance.usedSizeInBytes());
+        buffer.release();
     }
 
     @Test
@@ -191,58 +191,7 @@ public class BufferPoolTest
         buffer.readBytes(bufferContent);
         assertArrayEquals(content, bufferContent);
         assertEquals(0, GlobalBufferPoolAllocator.instance.usedSizeInBytes());
-    }
-
-    @Test
-    public void testAdoptedBufferContentAfterResize() {
-        DatabaseDescriptor.clientInitialization();
-        ByteBuf buffer = GlobalBufferPoolAllocator.instance.buffer(200, 300);
-        assertEquals(200, GlobalBufferPoolAllocator.instance.usedSizeInBytes());
-
-        byte[] content = new byte[300];
-
-        Random rand = new Random();
-        rand.nextBytes(content);
-
-        buffer.writeBytes(Arrays.copyOfRange(content, 0, 200));
-        assertEquals(200, GlobalBufferPoolAllocator.instance.usedSizeInBytes());
-
-        buffer.writeBytes(Arrays.copyOfRange(content, 200, 300));
-
-        byte[] bufferContent = new byte[300];
-
-        BufferPoolAllocator.Wrapped wrapped = (BufferPoolAllocator.Wrapped) buffer;
-        ByteBuffer adopted = wrapped.adopt();
-        adopted.get(bufferContent);
-        assertArrayEquals(content, bufferContent);
-        assertEquals(0, GlobalBufferPoolAllocator.instance.usedSizeInBytes());
-    }
-
-    @Test
-    public void testAdoptedBufferContentBeforeResize() {
-        DatabaseDescriptor.clientInitialization();
-        ByteBuf buffer = GlobalBufferPoolAllocator.instance.buffer(200, 300);
-        assertEquals(200, GlobalBufferPoolAllocator.instance.usedSizeInBytes());
-
-        byte[] content = new byte[200];
-
-        Random rand = new Random();
-        rand.nextBytes(content);
-
-        buffer.writeBytes(content);
-        assertEquals(200, GlobalBufferPoolAllocator.instance.usedSizeInBytes());
-
-        byte[] bufferContent = new byte[200];
-
-        BufferPoolAllocator.Wrapped wrapped = (BufferPoolAllocator.Wrapped) buffer;
-        ByteBuffer adopted = wrapped.adopt();
-        adopted.get(bufferContent);
-        assertArrayEquals(content, bufferContent);
-
-        // release adopted buffer back into the pool
-        adopted.limit(0);
-        GlobalBufferPoolAllocator.instance.putUnusedPortion(adopted);
-        assertEquals(0, GlobalBufferPoolAllocator.instance.usedSizeInBytes());
+        buffer.release();
     }
 
     @Test(expected = IndexOutOfBoundsException.class)

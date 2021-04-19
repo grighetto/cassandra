@@ -79,12 +79,18 @@ public abstract class BufferPoolAllocator extends AbstractByteBufAllocator
         bufferPool.put(buffer);
     }
 
-    @VisibleForTesting
-    public void putUnusedPortion(ByteBuffer buffer)
+    void putUnusedPortion(Wrapped buffer)
+    {
+        if (buffer.pooled)
+            bufferPool.putUnusedPortion(buffer.wrapped);
+    }
+
+    void putUnusedPortion(ByteBuffer buffer)
     {
         bufferPool.putUnusedPortion(buffer);
     }
 
+    @VisibleForTesting
     public long usedSizeInBytes() { return bufferPool.usedSizeInBytes(); }
 
     void release()
@@ -98,7 +104,7 @@ public abstract class BufferPoolAllocator extends AbstractByteBufAllocator
     public static class Wrapped extends UnpooledUnsafeDirectByteBuf
     {
         private ByteBuffer wrapped;
-        private boolean returnToPool = true;
+        private boolean pooled = true;
 
         Wrapped(BufferPoolAllocator allocator, ByteBuffer wrap, int maxCapacity)
         {
@@ -116,20 +122,29 @@ public abstract class BufferPoolAllocator extends AbstractByteBufAllocator
             ByteBuf newBuffer = super.capacity(newCapacity);
             ByteBuffer nioBuffer = newBuffer.nioBuffer(0, newBuffer.capacity());
 
-            if (returnToPool)
+            if (pooled)
                 bufferPool.put(wrapped);
 
             wrapped = nioBuffer;
-            returnToPool = false;
+            pooled = false;
             return newBuffer;
         }
-
 
         @Override
         public void deallocate()
         {
-            if (wrapped != null && returnToPool)
+            if (wrapped == null)
+                return;
+
+            // release initial buffer from the pool
+            if (pooled)
                 bufferPool.put(wrapped);
+            // or, if resized, release the new buffer
+            else {
+                super.deallocate();
+                wrapped = null;
+            }
+
         }
 
         public ByteBuffer adopt()
