@@ -26,6 +26,9 @@ import io.netty.buffer.UnpooledUnsafeDirectByteBuf;
 import org.apache.cassandra.io.compress.BufferType;
 import org.apache.cassandra.utils.memory.BufferPool;
 import org.apache.cassandra.utils.memory.BufferPools;
+import org.assertj.core.util.VisibleForTesting;
+
+import static java.lang.Integer.max;
 
 /**
  * A trivial wrapper around BufferPool for integrating with Netty, but retaining ownership of pooling behaviour
@@ -56,7 +59,7 @@ public abstract class BufferPoolAllocator extends AbstractByteBufAllocator
     @Override
     protected ByteBuf newDirectBuffer(int minCapacity, int maxCapacity)
     {
-        ByteBuf result = new Wrapped(this, getAtLeast(minCapacity));
+        ByteBuf result = new Wrapped(this, getAtLeast(minCapacity), maxCapacity);
         result.clear();
         return result;
     }
@@ -76,10 +79,19 @@ public abstract class BufferPoolAllocator extends AbstractByteBufAllocator
         bufferPool.put(buffer);
     }
 
+    void putUnusedPortion(Wrapped buffer)
+    {
+        if (buffer.pooled)
+            bufferPool.putUnusedPortion(buffer.wrapped);
+    }
+
     void putUnusedPortion(ByteBuffer buffer)
     {
         bufferPool.putUnusedPortion(buffer);
     }
+
+    @VisibleForTesting
+    public long usedSizeInBytes() { return bufferPool.usedSizeInBytes(); }
 
     void release()
     {
@@ -92,18 +104,47 @@ public abstract class BufferPoolAllocator extends AbstractByteBufAllocator
     public static class Wrapped extends UnpooledUnsafeDirectByteBuf
     {
         private ByteBuffer wrapped;
+        private boolean pooled = true;
 
-        Wrapped(BufferPoolAllocator allocator, ByteBuffer wrap)
+        Wrapped(BufferPoolAllocator allocator, ByteBuffer wrap, int maxCapacity)
         {
-            super(allocator, wrap, wrap.capacity());
+            super(allocator, wrap, max(wrap.capacity(), maxCapacity));
             wrapped = wrap;
+        }
+
+        @Override
+        public ByteBuf capacity(int newCapacity)
+        {
+            if (newCapacity == capacity())
+                return this;
+
+            // resizing doesn't use the pool
+            ByteBuf newBuffer = super.capacity(newCapacity);
+            ByteBuffer nioBuffer = newBuffer.nioBuffer(0, newBuffer.capacity());
+
+            if (pooled)
+                bufferPool.put(wrapped);
+
+            wrapped = nioBuffer;
+            pooled = false;
+            return newBuffer;
         }
 
         @Override
         public void deallocate()
         {
-            if (wrapped != null)
+            if (wrapped == null)
+                return;
+
+            // release initial buffer from the pool
+            if (pooled)
                 bufferPool.put(wrapped);
+            // or, if resized, release the new buffer
+            else {
+                super.deallocate();
+                wrapped = null;
+            }
+
         }
 
         public ByteBuffer adopt()
