@@ -79,12 +79,6 @@ public abstract class BufferPoolAllocator extends AbstractByteBufAllocator
         bufferPool.put(buffer);
     }
 
-    void putUnusedPortion(Wrapped buffer)
-    {
-        if (buffer.pooled)
-            bufferPool.putUnusedPortion(buffer.wrapped);
-    }
-
     void putUnusedPortion(ByteBuffer buffer)
     {
         bufferPool.putUnusedPortion(buffer);
@@ -104,7 +98,6 @@ public abstract class BufferPoolAllocator extends AbstractByteBufAllocator
     public static class Wrapped extends UnpooledUnsafeDirectByteBuf
     {
         private ByteBuffer wrapped;
-        private boolean pooled = true;
 
         Wrapped(BufferPoolAllocator allocator, ByteBuffer wrap, int maxCapacity)
         {
@@ -118,33 +111,33 @@ public abstract class BufferPoolAllocator extends AbstractByteBufAllocator
             if (newCapacity == capacity())
                 return this;
 
-            // resizing doesn't use the pool
             ByteBuf newBuffer = super.capacity(newCapacity);
             ByteBuffer nioBuffer = newBuffer.nioBuffer(0, newBuffer.capacity());
 
-            if (pooled)
-                bufferPool.put(wrapped);
-
+            bufferPool.put(wrapped);
             wrapped = nioBuffer;
-            pooled = false;
             return newBuffer;
+        }
+
+        @Override
+        protected ByteBuffer allocateDirect(int initialCapacity)
+        {
+            return bufferPool.getAtLeast(initialCapacity, BufferType.OFF_HEAP);
+        }
+
+        @Override
+        protected void freeDirect(ByteBuffer buffer)
+        {
+            // noop
+            // buffer is put back into the pool by deallocate()
         }
 
         @Override
         public void deallocate()
         {
-            if (wrapped == null)
-                return;
-
-            // release initial buffer from the pool
-            if (pooled)
+            super.deallocate();
+            if (wrapped != null)
                 bufferPool.put(wrapped);
-            // or, if resized, release the new buffer
-            else {
-                super.deallocate();
-                wrapped = null;
-            }
-
         }
 
         public ByteBuffer adopt()
