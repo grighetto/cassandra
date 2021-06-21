@@ -366,7 +366,7 @@ public class LongBufferPoolTest
                         size = 0;
 
                     // either share to free, or free immediately
-                    if (rand.nextBoolean())
+                    if (rand.nextInt(10) == 0)
                     {
                         shareTo.add(check);
                         freeingSize += size;
