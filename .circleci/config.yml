@@ -2820,6 +2820,8 @@ jobs:
           id
           echo '*** cat /proc/cpuinfo ***'
           cat /proc/cpuinfo
+          echo '*** nproc ***'
+          nproc
           echo '*** free -m ***'
           free -m
           echo '*** df -m ***'
